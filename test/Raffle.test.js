@@ -41,7 +41,6 @@ contract('Raffle', (accounts) => {
       vrfCoordinator.address,
       link.address,
       linkUsdFeed.address,
-      [stakingToken1.address, stakingToken2.address],
       stakeAmount,
       paymentToken.address,
       payoutWinners,
@@ -61,22 +60,23 @@ contract('Raffle', (accounts) => {
     await stakingToken2.approve(raffle.address, ether('100'), { from: user5 })
   })
 
-  it('must be funded first', async () => {
+  it('must be initialized first', async () => {
     await expectRevert(
       raffle.stake(stakingToken1.address, { from: user4 }),
-      '!funded'
+      '!initialized'
     )
 
-    // fund the contract
+    // init the contract
     await link.approve(raffle.address, ether('7'), { from: maintainer })
     await paymentToken.approve(raffle.address, ether('1'), { from: maintainer })
-    await raffle.fund()
+    await raffle.init([stakingToken1.address, stakingToken2.address])
+    assert.isTrue(await raffle.initialized())
     assert.isTrue(ether('1').eq(await link.balanceOf(raffle.address)))
     assert.isTrue(ether('1').eq(await paymentToken.balanceOf(raffle.address)))
 
     await expectRevert(
-      raffle.fund(),
-      'funded'
+      raffle.init([stakingToken1.address, stakingToken2.address]),
+      'initialized'
     )
 
   })

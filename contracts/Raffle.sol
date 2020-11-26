@@ -18,9 +18,9 @@ import "./lib/UniformRandomNumber.sol";
  * @dev Deployment/usage process:
  * - Deploy contract with documented parameters set
  * - Approve contract to spend LINK and the payoutToken for the amount multiplied by the winners
- * - Call fund()
+ * - Call init() with the addresses to be used for staking
  * - Users will need to approve the contract to spend the staking token
- * - Users can call stake() to stake the stakeAmount of the staking token and receive 1 NFT
+ * - Users can call stake(address) to stake the stakeAmount of the staking token and receive 1 NFT
  * - Users can stake until the drawing time
  * - After the drawing time, call getRandomNumber() as many times as there are winners
  * - Callers of getRandomNumber() must wait until the Chainlink VRF responds before creating the next request
@@ -44,7 +44,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
   uint256 public immutable drawingTime;
   uint256 public immutable emergencyEnd;
 
-  bool public funded;
+  bool public initialized;
   bool internal _request;
   uint256 internal _counter;
   address[] internal _winners;
@@ -65,7 +65,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @param _vrfCoordinator The address of the VRFCoordinator
    * @param _link The address of the LINK token
    * @param _linkUsd The address of the LINK/USD feed
-   * @param _stakingTokens The addresses of the staking tokens
    * @param _stakeAmount The amount of staking tokens for one ticket
    * @param _payoutToken The winning payout token address
    * @param _payoutWinners The number of winners in the raffle
@@ -80,7 +79,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
     address _vrfCoordinator,
     address _link,
     address _linkUsd,
-    address[] memory _stakingTokens,
     uint256 _stakeAmount,
     address _payoutToken,
     uint256 _payoutWinners,
@@ -102,22 +100,23 @@ contract Raffle is VRFConsumerBase, ERC721 {
     payoutAmount = _payoutAmount;
     drawingTime = _drawingTime;
     emergencyEnd = _drawingTime.add(1 days);
-    for (uint i = 0; i < _stakingTokens.length; i++) {
-      stakingToken[_stakingTokens[i]] = true;
-    }
   }
 
   /**
-   * @notice Funds the contract with the payout token and LINK token
+   * @notice Funds the contract with the payout token and LINK token and sets the staking tokens
    * @dev This contract must be approved for spending first
    * @dev Cannot be called twice but tokens can be manually sent to the contract
    * in case something goes wrong. However, these tokens will be unrecoverable.
+   * @param _stakingTokens The addresses of the staking tokens
    */
-  function fund() external {
-    require(!funded, "funded");
+  function init(address[] memory _stakingTokens) external {
+    require(!initialized, "initialized");
     payoutToken.safeTransferFrom(msg.sender, address(this), payoutAmount.mul(payoutWinners));
     LINK.transferFrom(msg.sender, address(this), fee.mul(payoutWinners));
-    funded = true;
+    for (uint i = 0; i < _stakingTokens.length; i++) {
+      stakingToken[_stakingTokens[i]] = true;
+    }
+    initialized = true;
   }
 
   /**
@@ -127,8 +126,8 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @dev Cannot be called after the lottery drawing has passed
    */
   function stake(address _stakingToken) external {
+    require(initialized, "!initialized");
     require(stakingToken[_stakingToken], "!stakingToken");
-    require(funded, "!funded");
     require(block.timestamp < drawingTime, "ended");
     _safeMint(msg.sender, ++_counter);
     _staked[_counter] = _stakingToken;
