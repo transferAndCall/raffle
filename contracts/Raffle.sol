@@ -40,7 +40,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
   uint256 public immutable fee;
   address public immutable vrfCoordinator;
   AggregatorInterface public immutable linkUsd;
-  IERC20 public immutable stakingToken;
   IERC20 public immutable payoutToken;
   uint256 public immutable drawingTime;
   uint256 public immutable emergencyEnd;
@@ -51,6 +50,8 @@ contract Raffle is VRFConsumerBase, ERC721 {
   address[] internal _winners;
 
   mapping(uint256 => bool) public won;
+  mapping(address => bool) public stakingToken;
+  mapping(uint256 => address) internal _staked;
 
   event Winner(address indexed _selected, uint256 indexed _tokenId);
   event GetRandom(bytes32 _requestId);
@@ -64,7 +65,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @param _vrfCoordinator The address of the VRFCoordinator
    * @param _link The address of the LINK token
    * @param _linkUsd The address of the LINK/USD feed
-   * @param _stakingToken The address of the staking token
+   * @param _stakingTokens The addresses of the staking tokens
    * @param _stakeAmount The amount of staking tokens for one ticket
    * @param _payoutToken The winning payout token address
    * @param _payoutWinners The number of winners in the raffle
@@ -79,7 +80,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     address _vrfCoordinator,
     address _link,
     address _linkUsd,
-    address _stakingToken,
+    address[] memory _stakingTokens,
     uint256 _stakeAmount,
     address _payoutToken,
     uint256 _payoutWinners,
@@ -95,13 +96,15 @@ contract Raffle is VRFConsumerBase, ERC721 {
     fee = _fee;
     vrfCoordinator = _vrfCoordinator;
     linkUsd = AggregatorInterface(_linkUsd);
-    stakingToken = IERC20(_stakingToken);
     stakeAmount = _stakeAmount;
     payoutToken = IERC20(_payoutToken);
     payoutWinners = _payoutWinners;
     payoutAmount = _payoutAmount;
     drawingTime = _drawingTime;
     emergencyEnd = _drawingTime.add(1 days);
+    for (uint i = 0; i < _stakingTokens.length; i++) {
+      stakingToken[_stakingTokens[i]] = true;
+    }
   }
 
   /**
@@ -123,11 +126,13 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @dev This contract must be approved for spending first
    * @dev Cannot be called after the lottery drawing has passed
    */
-  function stake() external {
+  function stake(address _stakingToken) external {
+    require(stakingToken[_stakingToken], "!stakingToken");
     require(funded, "!funded");
     require(block.timestamp < drawingTime, "ended");
     _safeMint(msg.sender, ++_counter);
-    stakingToken.safeTransferFrom(msg.sender, address(this), stakeAmount);
+    _staked[_counter] = _stakingToken;
+    IERC20(_stakingToken).safeTransferFrom(msg.sender, address(this), stakeAmount);
   }
 
   /**
@@ -145,7 +150,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
       if (won[token]) {
         payoutToken.safeTransfer(msg.sender, payoutAmount);
       }
-      stakingToken.safeTransfer(msg.sender, stakeAmount);
+      IERC20(_staked[token]).safeTransfer(msg.sender, stakeAmount);
     }
   }
 
