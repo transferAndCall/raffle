@@ -3,10 +3,10 @@
 Deployment/usage process:
 - Deploy contract with documented parameters set
 - Approve contract to spend LINK and the payoutToken for the amount multiplied by the winners
-- Call init() with the addresses to be used for staking
+- Call init(address[]) with the addresses to be used for staking
 - Users will need to approve the contract to spend the staking token
 - Users can call stake(address) to stake the stakeAmount of the staking token and receive 1 NFT
-- Users can stake until the drawing time
+- Users can stake as many times as they want until the drawing time
 - After the drawing time, call getRandomNumber() as many times as there are winners
 - Callers of getRandomNumber() must wait until the Chainlink VRF responds before creating the next request
 - When random numbers are received, winners are announced via an event
