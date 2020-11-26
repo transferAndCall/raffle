@@ -14,6 +14,7 @@ contract('Raffle', (accounts) => {
   const user5 = accounts[5]
   const name = 'Raffle 2020'
   const symbol = 'LG20'
+  const baseURI = 'http://example.com/'
   const winningNumber = new BN('770')
   const linkUsd = 1000000000
   const vrfKeyHash = constants.ZERO_BYTES32
@@ -36,6 +37,7 @@ contract('Raffle', (accounts) => {
     raffle = await Raffle.new(
       name,
       symbol,
+      baseURI,
       vrfKeyHash,
       vrfFee,
       vrfCoordinator.address,
@@ -86,15 +88,19 @@ contract('Raffle', (accounts) => {
     await raffle.stake(stakingToken1.address, { from: user1 })
     assert.isTrue(ether('1').eq(await stakingToken1.balanceOf(raffle.address)))
     assert.isTrue(ether('99').eq(await stakingToken1.balanceOf(user1)))
+    assert.equal(baseURI + '1', await raffle.tokenURI(1))
     await raffle.stake(stakingToken1.address, { from: user2 })
     assert.isTrue(ether('2').eq(await stakingToken1.balanceOf(raffle.address)))
     assert.isTrue(ether('99').eq(await stakingToken1.balanceOf(user2)))
+    assert.equal(baseURI + '2', await raffle.tokenURI(2))
     await raffle.stake(stakingToken1.address, { from: user3 })
     assert.isTrue(ether('3').eq(await stakingToken1.balanceOf(raffle.address)))
     assert.isTrue(ether('99').eq(await stakingToken1.balanceOf(user3)))
+    assert.equal(baseURI + '3', await raffle.tokenURI(3))
     await raffle.stake(stakingToken2.address, { from: user5 })
     assert.isTrue(ether('1').eq(await stakingToken2.balanceOf(raffle.address)))
     assert.isTrue(ether('99').eq(await stakingToken2.balanceOf(user5)))
+    assert.equal(baseURI + '4', await raffle.tokenURI(4))
 
     await expectRevert(
       raffle.unstake({ from: user1 }),

@@ -60,6 +60,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @notice Deploys the contract, setting many immutable variables
    * @param _name The name of the Raffle
    * @param _symbol The symbol of the NFT
+   * @param _baseURI The base URI of the NFT
    * @param _keyHash The keyHash or SAID of the VRF job
    * @param _fee The fee for each VRF request
    * @param _vrfCoordinator The address of the VRFCoordinator
@@ -74,6 +75,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
   constructor(
     string memory _name,
     string memory _symbol,
+    string memory _baseURI,
     bytes32 _keyHash,
     uint256 _fee,
     address _vrfCoordinator,
@@ -90,6 +92,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     public
   {
     require(_drawingTime > block.timestamp, "!drawingTime");
+    _setBaseURI(_baseURI);
     keyHash = _keyHash;
     fee = _fee;
     vrfCoordinator = _vrfCoordinator;
@@ -130,7 +133,9 @@ contract Raffle is VRFConsumerBase, ERC721 {
     require(stakingToken[_stakingToken], "!stakingToken");
     require(block.timestamp < drawingTime, "ended");
     _safeMint(msg.sender, ++_counter);
-    _staked[_counter] = _stakingToken;
+    uint256 token = _counter;
+    _setTokenURI(token, uint2str(token));
+    _staked[token] = _stakingToken;
     IERC20(_stakingToken).safeTransferFrom(msg.sender, address(this), stakeAmount);
   }
 
@@ -185,5 +190,25 @@ contract Raffle is VRFConsumerBase, ERC721 {
       _winners.push(selected);
       emit Winner(selected, token);
     }
+  }
+
+  // https://github.com/provable-things/ethereum-api/blob/master/oraclizeAPI_0.5.sol#L1045-L1062
+  function uint2str(uint _i) internal pure returns (string memory _uintAsString) {
+    if (_i == 0) {
+      return "0";
+    }
+    uint j = _i;
+    uint len;
+    while (j != 0) {
+      len++;
+      j /= 10;
+    }
+    bytes memory bstr = new bytes(len);
+    uint k = len - 1;
+    while (_i != 0) {
+      bstr[k--] = byte(uint8(48 + _i % 10));
+      _i /= 10;
+    }
+    return string(bstr);
   }
 }
