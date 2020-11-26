@@ -23,7 +23,7 @@ contract('Raffle', (accounts) => {
   const payoutAmount = ether('1')
   const stakeAmount = ether('1')
   const drawingTime = Math.floor(Date.now() / 1000) + 900
-  let raffle, stakingToken1, stakingToken2, link, paymentToken, linkUsdFeed, vrfCoordinator
+  let raffle, stakingToken1, stakingToken2, fakeToken, link, paymentToken, linkUsdFeed, vrfCoordinator
 
   before(async () => {
     LinkToken.setProvider(web3.currentProvider)
@@ -31,6 +31,7 @@ contract('Raffle', (accounts) => {
     link = await LinkToken.new({ from: maintainer })
     stakingToken1 = await Token.new({ from: maintainer })
     stakingToken2 = await Token.new({ from: maintainer })
+    fakeToken = await Token.new({ from: maintainer })
     paymentToken = await Token.new({ from: maintainer })
     vrfCoordinator = await MockVRFCoordinator.new(link.address, ether('1'), { from: maintainer })
     linkUsdFeed = await MockV2Aggregator.new(linkUsd, { from: maintainer })
@@ -50,12 +51,14 @@ contract('Raffle', (accounts) => {
       drawingTime,
       { from: maintainer },
     )
+    await fakeToken.transfer(user1, ether('100'), { from: maintainer })
     await stakingToken1.transfer(user1, ether('100'), { from: maintainer })
     await stakingToken1.transfer(user2, ether('100'), { from: maintainer })
     await stakingToken1.transfer(user3, ether('100'), { from: maintainer })
     // skip user4
     await stakingToken2.transfer(user5, ether('100'), { from: maintainer })
     // users approve the contract for spending LP tokens
+    await fakeToken.approve(raffle.address, ether('100'), { from: user1 })
     await stakingToken1.approve(raffle.address, ether('100'), { from: user1 })
     await stakingToken1.approve(raffle.address, ether('100'), { from: user2 })
     await stakingToken1.approve(raffle.address, ether('100'), { from: user3 })
@@ -68,7 +71,6 @@ contract('Raffle', (accounts) => {
       '!initialized'
     )
 
-    // init the contract
     await link.approve(raffle.address, ether('7'), { from: maintainer })
     await paymentToken.approve(raffle.address, ether('1'), { from: maintainer })
     await raffle.init([stakingToken1.address, stakingToken2.address])
@@ -80,11 +82,9 @@ contract('Raffle', (accounts) => {
       raffle.init([stakingToken1.address, stakingToken2.address]),
       'initialized'
     )
-
   })
 
   it('allows users to stake', async () => {
-    // users stake
     await raffle.stake(stakingToken1.address, { from: user1 })
     assert.isTrue(ether('1').eq(await stakingToken1.balanceOf(raffle.address)))
     assert.isTrue(ether('99').eq(await stakingToken1.balanceOf(user1)))
@@ -111,11 +111,14 @@ contract('Raffle', (accounts) => {
       raffle.getRandomNumber(),
       '!drawingTime'
     )
+
+    await expectRevert(
+      raffle.stake(fakeToken.address, { from: user1 }),
+      '!stakingToken'
+    )
   })
 
   it('users can trade the NFTs', async () => {
-
-    // users can trade NFTs
     await raffle.transferFrom(user1, user4, 1, { from: user1 })
     assert.equal(user4, await raffle.ownerOf(1))
     await raffle.transferFrom(user5, user4, 4, { from: user5 })
@@ -123,10 +126,8 @@ contract('Raffle', (accounts) => {
     assert.equal(2, await raffle.balanceOf(user4))
   })
 
-  it('drawing ends', async () => {
-    // drawing ends
+  it('users cannot stake after drawing ends', async () => {
     await time.increase(901)
-
     await expectRevert(
       raffle.stake(stakingToken1.address, { from: user4 }),
       'ended'
@@ -134,7 +135,6 @@ contract('Raffle', (accounts) => {
   })
 
   it('selects a winner', async () => {
-    // get random number
     const tx = await raffle.getRandomNumber()
     const requestId = tx.logs[0].args._requestId
     await expectRevert(
@@ -152,7 +152,6 @@ contract('Raffle', (accounts) => {
   })
 
   it('allows unstaking', async () => {
-    // users unstake
     const txWinningClaim = await raffle.unstake({ from: user2 })
     await expectEvent.inTransaction(txWinningClaim.tx, paymentToken, 'Transfer', {
       from: raffle.address,
