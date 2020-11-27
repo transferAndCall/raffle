@@ -143,7 +143,7 @@ contract('Raffle', (accounts) => {
     )
     await vrfCoordinator.fulfillRandomnessRequest(raffle.address, requestId, winningNumber)
     const winners = await raffle.winners()
-    assert.equal(user2, winners[0])
+    assert.equal(user2, await raffle.ownerOf(winners[0]))
 
     await expectRevert(
       raffle.getRandomNumber(),

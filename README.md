@@ -10,7 +10,7 @@ Deployment/usage process:
 - After the drawing time, call getRandomNumber() as many times as there are winners
 - Callers of getRandomNumber() must wait until the Chainlink VRF responds before creating the next request
 - When random numbers are received, winners are announced via an event
-- Winners can also be seen by calling winners()
+- Winning token IDs can also be seen by calling winners()
 - When all winners are selected, users can call unstake() to receive their staking tokens back and collect rewards if they're a winner
 
 ## Setup

@@ -47,7 +47,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
   bool public initialized;
   bool internal _request;
   uint256 internal _counter;
-  address[] internal _winners;
+  uint256[] internal _winners;
 
   mapping(uint256 => bool) public won;
   mapping(address => bool) public stakingToken;
@@ -174,21 +174,20 @@ contract Raffle is VRFConsumerBase, ERC721 {
   }
 
   /**
-   * @notice Get the winning addresses at the time of the drawing
-   * @dev Tickets can still be traded after drawing
+   * @notice Get the winning tokens
    */
-  function winners() external view returns (address[] memory) {
+  function winners() external view returns (uint256[] memory) {
     return _winners;
   }
 
   function fulfillRandomness(bytes32, uint256 _randomNumber) internal override {
-    uint256 token = UniformRandomNumber.uniform(_randomNumber, totalSupply());
     _request = false;
+    uint256 token = UniformRandomNumber.uniform(_randomNumber, totalSupply());
     if (token != 0) {
       won[token] = true;
-      address selected = ownerOf(token);
-      _winners.push(selected);
-      emit Winner(selected, token);
+      address winner = ownerOf(token);
+      _winners.push(token);
+      emit Winner(winner, token);
     }
   }
 
