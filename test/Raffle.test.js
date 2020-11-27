@@ -12,14 +12,19 @@ contract('Raffle', (accounts) => {
   const user3 = accounts[3]
   const user4 = accounts[4]
   const user5 = accounts[5]
+  const user6 = accounts[6]
+  const user7 = accounts[7]
+  const user8 = accounts[8]
+  const user9 = accounts[9]
   const name = 'Raffle 2020'
   const symbol = 'LG20'
   const baseURI = 'http://example.com/'
-  const winningNumber = new BN('770')
+  const randomNumber1 = new BN('770')
+  const randomNumber2 = new BN('470')
   const linkUsd = 1000000000
   const vrfKeyHash = constants.ZERO_BYTES32
   const vrfFee = ether('1')
-  const payoutWinners = 1
+  const payoutWinners = 2
   const payoutAmount = ether('1')
   const stakeAmount = ether('1')
   const drawingTime = Math.floor(Date.now() / 1000) + 900
@@ -57,12 +62,20 @@ contract('Raffle', (accounts) => {
     await stakingToken1.transfer(user3, ether('100'), { from: maintainer })
     // skip user4
     await stakingToken2.transfer(user5, ether('100'), { from: maintainer })
+    await stakingToken2.transfer(user6, ether('100'), { from: maintainer })
+    await stakingToken2.transfer(user7, ether('100'), { from: maintainer })
+    await stakingToken2.transfer(user8, ether('100'), { from: maintainer })
+    await stakingToken2.transfer(user9, ether('100'), { from: maintainer })
     // users approve the contract for spending LP tokens
     await fakeToken.approve(raffle.address, ether('100'), { from: user1 })
     await stakingToken1.approve(raffle.address, ether('100'), { from: user1 })
     await stakingToken1.approve(raffle.address, ether('100'), { from: user2 })
     await stakingToken1.approve(raffle.address, ether('100'), { from: user3 })
     await stakingToken2.approve(raffle.address, ether('100'), { from: user5 })
+    await stakingToken2.approve(raffle.address, ether('100'), { from: user6 })
+    await stakingToken2.approve(raffle.address, ether('100'), { from: user7 })
+    await stakingToken2.approve(raffle.address, ether('100'), { from: user8 })
+    await stakingToken2.approve(raffle.address, ether('100'), { from: user9 })
   })
 
   it('must be initialized first', async () => {
@@ -71,12 +84,12 @@ contract('Raffle', (accounts) => {
       '!initialized'
     )
 
-    await link.approve(raffle.address, ether('7'), { from: maintainer })
-    await paymentToken.approve(raffle.address, ether('1'), { from: maintainer })
+    await link.approve(raffle.address, ether('2'), { from: maintainer })
+    await paymentToken.approve(raffle.address, ether('2'), { from: maintainer })
     await raffle.init([stakingToken1.address, stakingToken2.address])
     assert.isTrue(await raffle.initialized())
-    assert.isTrue(ether('1').eq(await link.balanceOf(raffle.address)))
-    assert.isTrue(ether('1').eq(await paymentToken.balanceOf(raffle.address)))
+    assert.isTrue(ether('2').eq(await link.balanceOf(raffle.address)))
+    assert.isTrue(ether('2').eq(await paymentToken.balanceOf(raffle.address)))
 
     await expectRevert(
       raffle.init([stakingToken1.address, stakingToken2.address]),
@@ -101,6 +114,11 @@ contract('Raffle', (accounts) => {
     assert.isTrue(ether('1').eq(await stakingToken2.balanceOf(raffle.address)))
     assert.isTrue(ether('99').eq(await stakingToken2.balanceOf(user5)))
     assert.equal(baseURI + '4', await raffle.tokenURI(4))
+    await raffle.stake(stakingToken2.address, { from: user6 })
+    await raffle.stake(stakingToken2.address, { from: user7 })
+    await raffle.stake(stakingToken2.address, { from: user8 })
+    await raffle.stake(stakingToken2.address, { from: user9 })
+    assert.isTrue(ether('5').eq(await stakingToken2.balanceOf(raffle.address)))
 
     await expectRevert(
       raffle.unstake({ from: user1 }),
@@ -109,7 +127,7 @@ contract('Raffle', (accounts) => {
 
     await expectRevert(
       raffle.getRandomNumber(),
-      '!drawingTime'
+      '!canGetRandomNumber'
     )
 
     await expectRevert(
@@ -139,21 +157,24 @@ contract('Raffle', (accounts) => {
     const requestId = tx.logs[0].args._requestId
     await expectRevert(
       raffle.getRandomNumber(),
-      'request'
+      '!canGetRandomNumber'
     )
-    await vrfCoordinator.fulfillRandomnessRequest(raffle.address, requestId, winningNumber)
+    const tx2 = await vrfCoordinator.fulfillRandomnessRequest(raffle.address, requestId, randomNumber1)
+    const requestId2 = tx2.receipt.rawLogs[3].data
+    await vrfCoordinator.fulfillRandomnessRequest(raffle.address, requestId2, randomNumber2)
     const winners = await raffle.winners()
     assert.equal(user2, await raffle.ownerOf(winners[0]))
+    assert.equal(user7, await raffle.ownerOf(winners[1]))
 
     await expectRevert(
       raffle.getRandomNumber(),
-      '!winners'
+      '!canGetRandomNumber'
     )
   })
 
   it('allows unstaking', async () => {
-    const txWinningClaim = await raffle.unstake({ from: user2 })
-    await expectEvent.inTransaction(txWinningClaim.tx, paymentToken, 'Transfer', {
+    const tx = await raffle.unstake({ from: user2 })
+    await expectEvent.inTransaction(tx.tx, paymentToken, 'Transfer', {
       from: raffle.address,
       to: user2
     })
@@ -162,11 +183,23 @@ contract('Raffle', (accounts) => {
     await raffle.unstake({ from: user3 })
     assert.isTrue(ether('1').eq(await stakingToken1.balanceOf(raffle.address)))
     assert.isTrue(ether('100').eq(await stakingToken1.balanceOf(user3)))
-    assert.isTrue(ether('1').eq(await stakingToken2.balanceOf(raffle.address)))
+    assert.isTrue(ether('5').eq(await stakingToken2.balanceOf(raffle.address)))
     await raffle.unstake({ from: user4 })
     assert.isTrue(ether('0').eq(await stakingToken1.balanceOf(raffle.address)))
-    assert.isTrue(ether('0').eq(await stakingToken2.balanceOf(raffle.address)))
+    assert.isTrue(ether('4').eq(await stakingToken2.balanceOf(raffle.address)))
     assert.isTrue(ether('1').eq(await stakingToken1.balanceOf(user4)))
     assert.isTrue(ether('1').eq(await stakingToken2.balanceOf(user4)))
+    await raffle.unstake({ from: user6 })
+    assert.isTrue(ether('3').eq(await stakingToken2.balanceOf(raffle.address)))
+    const tx2 = await raffle.unstake({ from: user7 })
+    await expectEvent.inTransaction(tx2.tx, paymentToken, 'Transfer', {
+      from: raffle.address,
+      to: user7
+    })
+    assert.isTrue(ether('2').eq(await stakingToken2.balanceOf(raffle.address)))
+    await raffle.unstake({ from: user8 })
+    assert.isTrue(ether('1').eq(await stakingToken2.balanceOf(raffle.address)))
+    await raffle.unstake({ from: user9 })
+    assert.isTrue(ether('0').eq(await stakingToken2.balanceOf(raffle.address)))
   })
 })

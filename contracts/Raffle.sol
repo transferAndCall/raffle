@@ -5,14 +5,12 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "./lib/VRFConsumerBase.sol";
-import "./lib/UniformRandomNumber.sol";
 
 /**
  * @title Raffle
- * @notice Disclaimer:
- * !!! This is unaudited code !!!
- * Inspired by PoolTogether
- * https://github.com/pooltogether/pooltogether-pool-contracts/blob/master/contracts/token/Ticket.sol
+ * @notice Given a prize token and an array of acceptible staking tokens, this contract utilizes
+ * Chainlink's VRF to select winners of a raffle.
+ * @notice Disclaimer: !!! This is unaudited code !!!
  * @dev No ownership requirements of this contract. The project running the raffle is responsible for ensuring
  * the contract is funded and getRandomNumber() is called.
  * @dev Deployment/usage process:
@@ -22,8 +20,8 @@ import "./lib/UniformRandomNumber.sol";
  * - Users will need to approve the contract to spend the staking token
  * - Users can call stake(address) to stake the stakeAmount of the staking token and receive 1 NFT
  * - Users can stake as many times as they want until the drawing time
- * - After the drawing time, call getRandomNumber() as many times as there are winners
- * - Callers of getRandomNumber() must wait until the Chainlink VRF responds before creating the next request
+ * - After the drawing time, call getRandomNumber()
+ * - If there are more than 1 winners, the response of the VRF node will initiate the next request until all winners are selected
  * - When random numbers are received, winners are announced via an event
  * - Winners can also be seen by calling winners()
  * - When all winners are selected, users can call unstake() to receive their staking tokens back and collect
@@ -159,14 +157,19 @@ contract Raffle is VRFConsumerBase, ERC721 {
   }
 
   /**
+   * @notice Get the winning tokens
+   */
+  function winners() external view returns (uint256[] memory) {
+    return _winners;
+  }
+
+  /**
    * @notice Requests a random number from the Chainlink VRF
    * @dev Has a mutex to prevent calling the function multiple times before
    * the Chainlink node has a chance to respond.
    */
-  function getRandomNumber() external {
-    require(block.timestamp >= drawingTime, "!drawingTime");
-    require(_winners.length < payoutWinners, "!winners");
-    require(!_request, "request");
+  function getRandomNumber() public {
+    require(canGetRandomNumber(), "!canGetRandomNumber");
     _request = true;
     // use the LINK/USD price feed as the seed for randomness
     bytes32 requestId = requestRandomness(keyHash, fee, uint256(linkUsd.latestAnswer()));
@@ -174,20 +177,26 @@ contract Raffle is VRFConsumerBase, ERC721 {
   }
 
   /**
-   * @notice Get the winning tokens
+   * @notice Determines whether a request can be made for randomness
+   * @return bool if a request can be made
    */
-  function winners() external view returns (uint256[] memory) {
-    return _winners;
+  function canGetRandomNumber() public view returns (bool) {
+    return block.timestamp >= drawingTime
+      && _winners.length < payoutWinners
+      && !_request;
   }
 
   function fulfillRandomness(bytes32, uint256 _randomNumber) internal override {
     _request = false;
-    uint256 token = UniformRandomNumber.uniform(_randomNumber, totalSupply());
+    uint256 token = _randomNumber % totalSupply();
     if (token != 0) {
       won[token] = true;
       address winner = ownerOf(token);
       _winners.push(token);
       emit Winner(winner, token);
+    }
+    if (_winners.length < payoutWinners && LINK.balanceOf(address(this)) >= fee) {
+      getRandomNumber();
     }
   }
 
