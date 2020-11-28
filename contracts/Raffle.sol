@@ -109,15 +109,19 @@ contract Raffle is VRFConsumerBase, ERC721 {
 
   /**
    * @notice Funds the contract with the payout token and LINK token and sets the staking tokens
-   * @dev This contract must be approved for spending first
+   * @dev If not already funded, this contract must be approved for spending first
    * @dev Cannot be called twice but tokens can be manually sent to the contract
    * in case something goes wrong. However, these tokens will be unrecoverable.
    * @param _stakingTokens The addresses of the staking tokens
    */
   function init(address[] memory _stakingTokens) external {
     require(!initialized, "initialized");
-    payoutToken.safeTransferFrom(msg.sender, address(this), payoutAmount.mul(payoutWinners));
-    LINK.transferFrom(msg.sender, address(this), fee.mul(payoutWinners));
+    if (payoutToken.balanceOf(address(this)) < payoutAmount.mul(payoutWinners)) {
+      payoutToken.safeTransferFrom(msg.sender, address(this), payoutAmount.mul(payoutWinners));
+    }
+    if (LINK.balanceOf(address(this)) < fee.mul(payoutWinners)) {
+      LINK.transferFrom(msg.sender, address(this), fee.mul(payoutWinners));
+    }
     for (uint i = 0; i < _stakingTokens.length; i++) {
       stakingToken[_stakingTokens[i]] = true;
     }

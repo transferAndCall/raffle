@@ -87,7 +87,7 @@ contract('Raffle', (accounts) => {
     )
 
     await link.approve(raffle.address, ether('2'), { from: maintainer })
-    await paymentToken.approve(raffle.address, ether('2'), { from: maintainer })
+    await paymentToken.transfer(raffle.address, ether('2'), { from: maintainer })
     await raffle.init([stakingToken1.address, stakingToken2.address])
     assert.isTrue(await raffle.initialized())
     assert.isTrue(ether('2').eq(await link.balanceOf(raffle.address)))
