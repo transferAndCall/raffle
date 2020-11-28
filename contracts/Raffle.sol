@@ -32,6 +32,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
   using SafeMath for uint256;
 
   uint256 public immutable stakeAmount;
+  uint256 public immutable stakeCap;
   uint256 public immutable payoutAmount;
   uint256 public immutable payoutWinners;
   bytes32 public immutable keyHash;
@@ -65,6 +66,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @param _link The address of the LINK token
    * @param _linkUsd The address of the LINK/USD feed
    * @param _stakeAmount The amount of staking tokens for one ticket
+   * @param _stakeCap The maximum number of times an address can stake (0 for no cap)
    * @param _payoutToken The winning payout token address
    * @param _payoutWinners The number of winners in the raffle
    * @param _payoutAmount The amount to pay each winner
@@ -80,6 +82,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     address _link,
     address _linkUsd,
     uint256 _stakeAmount,
+    uint256 _stakeCap,
     address _payoutToken,
     uint256 _payoutWinners,
     uint256 _payoutAmount,
@@ -96,6 +99,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     vrfCoordinator = _vrfCoordinator;
     linkUsd = AggregatorInterface(_linkUsd);
     stakeAmount = _stakeAmount;
+    stakeCap = _stakeCap;
     payoutToken = IERC20(_payoutToken);
     payoutWinners = _payoutWinners;
     payoutAmount = _payoutAmount;
@@ -130,6 +134,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     require(initialized, "!initialized");
     require(stakingToken[_stakingToken], "!stakingToken");
     require(block.timestamp < drawingTime, "ended");
+    require(balanceOf(msg.sender) < stakeCap || stakeCap == 0, "stakeCap");
     _safeMint(msg.sender, ++_counter);
     uint256 token = _counter;
     _setTokenURI(token, uint2str(token));
@@ -189,12 +194,14 @@ contract Raffle is VRFConsumerBase, ERC721 {
   function fulfillRandomness(bytes32, uint256 _randomNumber) internal override {
     _request = false;
     uint256 token = _randomNumber % totalSupply();
-    if (token != 0) {
-      won[token] = true;
-      address winner = ownerOf(token);
-      _winners.push(token);
-      emit Winner(winner, token);
+    // special case because there is no token 0
+    if (token == 0) {
+      token = (_randomNumber + 1) % totalSupply();
     }
+    won[token] = true;
+    address winner = ownerOf(token);
+    _winners.push(token);
+    emit Winner(winner, token);
     if (_winners.length < payoutWinners && LINK.balanceOf(address(this)) >= fee) {
       getRandomNumber();
     }
