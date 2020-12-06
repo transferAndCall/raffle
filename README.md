@@ -12,7 +12,7 @@ Deployment/usage process:
  - The first to stake on the next day creates the randomness request for the previous day
  - When random numbers are received, winners are announced via an event
  - Winners can also be seen by calling winners()
- - When all winners are selected, users can call unstake() to receive their staking tokens back and collect rewards if they're a winner
+ - When the day has ended, users can call unstake() to receive their staking tokens back and collect rewards if they're a winner
 
 ## Setup
 

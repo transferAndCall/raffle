@@ -190,6 +190,12 @@ contract('Raffle', (accounts) => {
     assert.equal(user1, await raffle.ownerOf(winners[0]))
     await raffle.stake(stakingToken2.address, { from: user7 })
     await raffle.stake(stakingToken2.address, { from: user8 })
+    const unstakeTx = await raffle.unstake({ from: user1 })
+    await expectEvent.inTransaction(unstakeTx.tx, payoutToken, 'Transfer', {
+      from: raffle.address,
+      to: user1
+    })
+    await raffle.unstake({ from: user2 })
   })
 
   it('staking day 3', async () => {
@@ -206,15 +212,17 @@ contract('Raffle', (accounts) => {
     await raffle.stake(stakingToken2.address, { from: user9 })
     await raffle.stake(stakingToken3.address, { from: user9 })
     assert.isTrue(ether('6').eq(await stakingToken2.balanceOf(raffle.address)))
+    await raffle.transferFrom(user6, user4, 4, { from: user6 })
+    assert.equal(user4, await raffle.ownerOf(4))
+    const unstakeTx = await raffle.unstake({ from: user4 })
+    await expectEvent.inTransaction(unstakeTx.tx, stakingToken2, 'Transfer', {
+      from: raffle.address,
+      to: user4
+    })
 
     await expectRevert(
       raffle.stake(stakingToken2.address, { from: user9 }),
       'stakeCap'
-    )
-
-    await expectRevert(
-      raffle.unstake({ from: user1 }),
-      '!ended'
     )
 
     await expectRevert(
@@ -229,8 +237,6 @@ contract('Raffle', (accounts) => {
   })
 
   it('users can trade the NFTs', async () => {
-    await raffle.transferFrom(user1, user4, 0, { from: user1 })
-    assert.equal(user4, await raffle.ownerOf(0))
     await raffle.transferFrom(user5, user4, 3, { from: user5 })
     assert.equal(user4, await raffle.ownerOf(3))
     assert.equal(2, await raffle.balanceOf(user4))
@@ -253,17 +259,12 @@ contract('Raffle', (accounts) => {
     )
     await vrfCoordinator.fulfillRandomnessRequest(raffle.address, requestId, randomNumber3)
     const winners = await raffle.winners()
-    assert.equal(user4, await raffle.ownerOf(winners[0]))
+    assert.equal(user1, await raffle.ownerOf(winners[0]))
     assert.equal(user7, await raffle.ownerOf(winners[1]))
     assert.equal(user9, await raffle.ownerOf(winners[2]))
   })
 
-  it('allows unstaking', async () => {
-    const tx = await raffle.unstake({ from: user4 })
-    await expectEvent.inTransaction(tx.tx, payoutToken, 'Transfer', {
-      from: raffle.address,
-      to: user4
-    })
+  it('allows unstaking after the last drawing', async () => {
     const tx2 = await raffle.unstake({ from: user7 })
     await expectEvent.inTransaction(tx2.tx, payoutToken, 'Transfer', {
       from: raffle.address,
@@ -274,9 +275,11 @@ contract('Raffle', (accounts) => {
       from: raffle.address,
       to: user9
     })
-    await raffle.unstake({ from: user2 })
     await raffle.unstake({ from: user3 })
-    await raffle.unstake({ from: user6 })
+    await expectRevert(
+      raffle.unstake({ from: user6 }),
+      '!staked'
+    )
     await raffle.unstake({ from: user8 })
     await expectRevert(
       raffle.unstake({ from: user5 }),

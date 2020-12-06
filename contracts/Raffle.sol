@@ -28,7 +28,7 @@ import "./ILinkswapPair.sol";
  * - The first to stake on the next day creates the randomness request for the previous day
  * - When random numbers are received, winners are announced via an event
  * - Winners can also be seen by calling winners()
- * - When all winners are selected, users can call unstake() to receive their staking tokens back and collect
+ * - When the day has ended, users can call unstake() to receive their staking tokens back and collect
      rewards if they're a winner
  */
 contract Raffle is VRFConsumerBase, ERC721 {
@@ -47,16 +47,21 @@ contract Raffle is VRFConsumerBase, ERC721 {
   uint256 public immutable startTime;
   uint256 public immutable activeDays;
   uint256 public immutable drawingTime;
-  uint256 public immutable emergencyEnd;
 
   bool public initialized;
   uint256 internal _counter;
   uint256[] internal _winners;
 
+  struct Stake {
+    bool claimed;
+    address stakingToken;
+    uint256 epoch;
+  }
+
   mapping(uint256 => bool) public won;
   mapping(uint256 => address) public stakingToken;
   mapping(uint256 => uint256) internal _lastTokenInEpoch;
-  mapping(uint256 => address) internal _staked;
+  mapping(uint256 => Stake) internal _staked;
   mapping(uint256 => bytes32) internal _randomnessRequestId;
 
   event Winner(address indexed _selected, uint256 indexed _tokenId);
@@ -116,7 +121,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
     activeDays = _days;
     uint256 _drawingTime = _startTime.add(_days.mul(1 days));
     drawingTime = _drawingTime;
-    emergencyEnd = _drawingTime.add(1 days);
   }
 
   /**
@@ -178,7 +182,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     _lastTokenInEpoch[currentEpoch()] = token;
     _safeMint(msg.sender, token);
     _setTokenURI(token, Strings.toString(token));
-    _staked[token] = _stakingToken;
+    _staked[token] = Stake(false, _stakingToken, currentEpoch());
     if (canGetRandomNumber()) {
       getRandomNumber();
     }
@@ -189,18 +193,20 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @notice Recovers the staked LP tokens
    * @dev Loops through all the tickets, this can get expensive if
    * a user has many.
-   * @dev In case something goes wrong, users can unstake after the emergencyEnd time
    */
   function unstake() external {
-    require(_winners.length >= activeDays || block.timestamp > emergencyEnd, "!ended");
     uint256 balance = balanceOf(msg.sender);
     require(balance > 0, "!staked");
     for (uint i = 0; i < balance; i++) {
       uint256 token = tokenOfOwnerByIndex(msg.sender, i);
-      if (won[token]) {
-        payoutToken.safeTransfer(msg.sender, payoutAmount);
+      Stake memory stake = _staked[token];
+      if (!stake.claimed && stake.epoch < currentEpoch()) {
+          _staked[token].claimed = true;
+          if (won[token]) {
+            payoutToken.safeTransfer(msg.sender, payoutAmount);
+          }
+          IERC20(stake.stakingToken).safeTransfer(msg.sender, stakeAmount);
       }
-      IERC20(_staked[token]).safeTransfer(msg.sender, stakeAmount);
     }
   }
 
