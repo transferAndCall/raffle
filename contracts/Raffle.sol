@@ -55,7 +55,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
   struct Stake {
     bool claimed;
     address stakingToken;
-    uint256 epoch;
+    uint256 day;
   }
 
   mapping(uint256 => bool) public won;
@@ -146,9 +146,9 @@ contract Raffle is VRFConsumerBase, ERC721 {
   }
 
   /**
-   * @notice Returns the current epoch number
+   * @notice Returns the current day (starts at 0)
    */
-  function currentEpoch() public view returns (uint256) {
+  function currentDay() public view returns (uint256) {
     require(block.timestamp > startTime, "!startTime");
     return block.timestamp.sub(startTime).div(1 days);
   }
@@ -157,7 +157,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @notice Returns the address of the current accepted staking token
    */
   function currentStakingToken() public view returns (address) {
-    return stakingToken[currentEpoch()];
+    return stakingToken[currentDay()];
   }
 
   /**
@@ -179,10 +179,10 @@ contract Raffle is VRFConsumerBase, ERC721 {
       require(linkswapFactory.getPair(token0, token1) == _stakingToken, "!_stakingToken");
     }
     uint256 token = _counter++;
-    _lastTokenInEpoch[currentEpoch()] = token;
+    _lastTokenInEpoch[currentDay()] = token;
     _safeMint(msg.sender, token);
     _setTokenURI(token, Strings.toString(token));
-    _staked[token] = Stake(false, _stakingToken, currentEpoch());
+    _staked[token] = Stake(false, _stakingToken, currentDay());
     if (canGetRandomNumber()) {
       getRandomNumber();
     }
@@ -200,7 +200,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     for (uint i = 0; i < balance; i++) {
       uint256 token = tokenOfOwnerByIndex(msg.sender, i);
       Stake memory stake = _staked[token];
-      if (!stake.claimed && stake.epoch < currentEpoch()) {
+      if (!stake.claimed && stake.day < currentDay()) {
           _staked[token].claimed = true;
           if (won[token]) {
             payoutToken.safeTransfer(msg.sender, payoutAmount);
@@ -226,7 +226,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     require(canGetRandomNumber(), "!canGetRandomNumber");
     // use the LINK/USD price feed as the seed for randomness
     bytes32 requestId = requestRandomness(keyHash, fee, uint256(linkUsd.latestAnswer()));
-    _randomnessRequestId[currentEpoch().sub(1)] = requestId;
+    _randomnessRequestId[currentDay().sub(1)] = requestId;
     emit GetRandom(requestId);
   }
 
@@ -235,26 +235,26 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @return bool if a request can be made
    */
   function canGetRandomNumber() public view returns (bool) {
-    if (currentEpoch() == 0) {
+    if (currentDay() == 0) {
       return false;
     } else {
-      return _randomnessRequestId[currentEpoch().sub(1)] == bytes32(0);
+      return _randomnessRequestId[currentDay().sub(1)] == bytes32(0);
     }
   }
 
   function fulfillRandomness(bytes32, uint256 _randomNumber) internal override {
-    uint256 current = currentEpoch();
+    uint256 current = currentDay();
     uint256 min;
     uint256 max;
-    // special case for epoch 0
+    // special case for day 0
     if (current == 1) {
       min = 0;
       max = _lastTokenInEpoch[0];
-    // special case for the last epoch
+    // special case for the last day
     } else if (current == activeDays) {
       min = _lastTokenInEpoch[current.sub(1)];
       max = totalSupply();
-    // all other epochs
+    // all other days
     } else {
       min = _lastTokenInEpoch[current.sub(2)];
       max = _lastTokenInEpoch[current.sub(1)];

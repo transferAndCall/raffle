@@ -154,9 +154,9 @@ contract('Raffle', (accounts) => {
       raffle.stake(stakingToken1.address, { from: user1 }),
       '!startTime'
     )
-    // raffle begins epoch 0
+    // raffle begins day 0
     await time.increase(901)
-    assert.equal(0, await raffle.currentEpoch())
+    assert.equal(0, await raffle.currentDay())
     await raffle.stake(stakingToken1.address, { from: user1 })
     assert.isTrue(ether('1').eq(await stakingToken1.balanceOf(raffle.address)))
     assert.isTrue(ether('99').eq(await stakingToken1.balanceOf(user1)))
@@ -177,7 +177,7 @@ contract('Raffle', (accounts) => {
 
   it('staking day 2', async () => {
     await time.increase(n1Day)
-    assert.equal(1, await raffle.currentEpoch())
+    assert.equal(1, await raffle.currentDay())
     const tx = await raffle.stake(stakingToken2.address, { from: user5 })
     const requestId = tx.logs[1].args._requestId
     assert.isTrue(ether('1').eq(await stakingToken2.balanceOf(raffle.address)))
@@ -200,7 +200,7 @@ contract('Raffle', (accounts) => {
 
   it('staking day 3', async () => {
     await time.increase(n1Day)
-    assert.equal(2, await raffle.currentEpoch())
+    assert.equal(2, await raffle.currentDay())
     // randomness can still be requested manually
     const tx = await raffle.getRandomNumber()
     const requestId = tx.logs[0].args._requestId
