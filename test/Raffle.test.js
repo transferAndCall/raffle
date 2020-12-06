@@ -195,9 +195,11 @@ contract('Raffle', (accounts) => {
   it('staking day 3', async () => {
     await time.increase(n1Day)
     assert.equal(2, await raffle.currentEpoch())
-    const tx = await raffle.stake(stakingToken2.address, { from: user9 })
-    const requestId = tx.logs[1].args._requestId
+    // randomness can still be requested manually
+    const tx = await raffle.getRandomNumber()
+    const requestId = tx.logs[0].args._requestId
     await vrfCoordinator.fulfillRandomnessRequest(raffle.address, requestId, randomNumber2)
+    await raffle.stake(stakingToken2.address, { from: user9 })
     const winners = await raffle.winners()
     assert.equal(user1, await raffle.ownerOf(winners[0]))
     assert.equal(user7, await raffle.ownerOf(winners[1]))
