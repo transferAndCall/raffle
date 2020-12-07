@@ -58,11 +58,16 @@ contract Raffle is VRFConsumerBase, ERC721 {
     uint256 day;
   }
 
+  struct Randomness {
+    bytes32 requestId;
+    bool answered;
+  }
+
   mapping(uint256 => bool) public won;
   mapping(uint256 => address) public stakingToken;
   mapping(uint256 => uint256) internal _lastTokenInEpoch;
   mapping(uint256 => Stake) internal _staked;
-  mapping(uint256 => bytes32) internal _randomnessRequestId;
+  mapping(uint256 => Randomness) internal _randomnessRequest;
 
   event Winner(address indexed _selected, uint256 indexed _tokenId);
   event GetRandom(bytes32 _requestId);
@@ -195,6 +200,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * a user has many.
    */
   function unstake() external {
+    require(_randomnessRequest[currentDay().sub(1)].answered, "!answered");
     uint256 balance = balanceOf(msg.sender);
     require(balance > 0, "!staked");
     for (uint i = 0; i < balance; i++) {
@@ -226,7 +232,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     require(canGetRandomNumber(), "!canGetRandomNumber");
     // use the LINK/USD price feed as the seed for randomness
     bytes32 requestId = requestRandomness(keyHash, fee, uint256(linkUsd.latestAnswer()));
-    _randomnessRequestId[currentDay().sub(1)] = requestId;
+    _randomnessRequest[currentDay().sub(1)] = Randomness(requestId, false);
     emit GetRandom(requestId);
   }
 
@@ -238,12 +244,13 @@ contract Raffle is VRFConsumerBase, ERC721 {
     if (currentDay() == 0) {
       return false;
     } else {
-      return _randomnessRequestId[currentDay().sub(1)] == bytes32(0);
+      return _randomnessRequest[currentDay().sub(1)].requestId == bytes32(0);
     }
   }
 
   function fulfillRandomness(bytes32, uint256 _randomNumber) internal override {
     uint256 current = currentDay();
+    _randomnessRequest[current.sub(1)].answered = true;
     uint256 min;
     uint256 max;
     // special case for day 0

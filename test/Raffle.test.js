@@ -185,6 +185,11 @@ contract('Raffle', (accounts) => {
     assert.equal(baseURI + '3', await raffle.tokenURI(3))
     // users can still stake before the VRF response
     await raffle.stake(stakingToken2.address, { from: user6 })
+    // users cannot unstake before the VRF response
+    await expectRevert(
+      raffle.unstake({ from: user1 }),
+      '!answered'
+    )
     await vrfCoordinator.fulfillRandomnessRequest(raffle.address, requestId, randomNumber1)
     const winners = await raffle.winners()
     assert.equal(user1, await raffle.ownerOf(winners[0]))
