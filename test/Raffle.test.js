@@ -301,6 +301,10 @@ contract('Raffle', (accounts) => {
     assert.equal(2, await raffle.currentDay())
     // randomness can still be requested manually
     const tx = await raffle.getRandomNumber()
+    await expectRevert(
+      raffle.getRandomNumber(),
+      '!canGetRandomNumber'
+    )
     const requestId = tx.logs[0].args._requestId
     await vrfCoordinator.fulfillRandomnessRequest(raffle.address, requestId, randomNumber2)
     await raffle.stake(stakingToken2.address, { from: user9 })

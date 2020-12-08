@@ -11,25 +11,24 @@ import "./ILinkswapPair.sol";
 
 /**
  * @title Raffle
- * @notice Given a prize token and an array of acceptible staking tokens, this contract utilizes
- * Chainlink's VRF to select winners of a raffle.
+ * @notice This contract mints an NFT as a raffle ticket for each address that stakes to it. Each day, a winner is selected from the previous day, which utilizes Chainlink's VRF to select the winning token ID. Winners collect YFL as a prize and optionally a sponsor token payout as well.
  * @notice Disclaimer: !!! This is unaudited code !!!
- * @dev No ownership requirements of this contract. The project running the raffle is responsible for ensuring
- * the contract is funded and getRandomNumber() is called.
+ * @dev No ownership requirements of this contract. The project running the raffle is responsible for ensuring the contract is funded and the final getRandomNumber() is called. Once the contract is initialized, funds cannot be pulled out except by participants.
  * @dev Deployment/usage process:
  * - Deploy contract with documented parameters set
- * - Approve contract to spend LINK and YFL for the amount multiplied by the winners
+ * - Approve contract to spend LINK and YFL for the amount multiplied by the number of days
  * - Optionally you can simply send LINK and YFL directly to the contract
- * - Call init(address[]) with the addresses to be used for staking (the LP tokens)
+ * - Call init(address[],address[],uint256[]) with the addresses to be used for staking (the LP tokens), the addresses to be used for any sponsor payouts for that day, and the amount of sponsor payouts
+ * - At this point, the contract is simply waiting for the start time to pass
  * - Users will need to approve the contract to spend the staking token
  * - Users can call stake(address) to stake the stakeAmount of the staking token and receive 1 NFT
- * - Users can stake as many times as they want until the drawing time
- * - After the drawing time, call getRandomNumber() one final time
+ * - Users can stake as many times as they want until the drawing time for that day
  * - The first to stake on the next day creates the randomness request for the previous day
  * - When random numbers are received, winners are announced via an event
- * - Winners can also be seen by calling winners()
- * - When the day has ended, users can call unstake() to receive their staking tokens back and collect
-     rewards if they're a winner
+ * - Winning tokenIDs can also be seen by calling winners()
+ * - When the day has ended, users can call unstake() to receive their staking tokens back and collect rewards if they're a winner
+ * - The process of staking and getting a random number repeats for as many days of the raffle
+ * - After the last day, someone must call getRandomNumber() one final time to select the last day's winner
  */
 contract Raffle is VRFConsumerBase, ERC721 {
   using SafeERC20 for IERC20;
@@ -177,6 +176,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
 
   /**
    * @notice Returns the current day (starts at 0)
+   * @dev reverts if the raffle has not started
    */
   function currentDay() public view returns (uint256) {
     require(block.timestamp > startTime, "!startTime");
@@ -185,16 +185,19 @@ contract Raffle is VRFConsumerBase, ERC721 {
 
   /**
    * @notice Returns the address of the current accepted staking token
+   * @dev The day's staking token can be the 0 address, which means
+   * that any LP token of LINKSWAP would be accepted for staking
    */
   function currentStakingToken() public view returns (address) {
     return _day[currentDay()].stakingToken;
   }
 
   /**
-   * @notice Issues a NFT representing a lottery ticket
+   * @notice Issues a NFT representing a lottery ticket to the caller
    * @notice Cost of a ticket is determined by the stakeAmount
    * @dev This contract must be approved for spending first
    * @dev Cannot be called after the lottery drawing has passed
+   * @param _stakingToken The LINKSWAP staking token address
    */
   function stake(address _stakingToken) external {
     require(initialized, "!initialized");
@@ -221,6 +224,8 @@ contract Raffle is VRFConsumerBase, ERC721 {
 
   /**
    * @notice Recovers the staked LP tokens
+   * @notice If caller holds a winning tokenID, this will send them their YFL prize
+   * and any sponsor payout tokens
    * @dev Loops through all the tickets, this can get expensive if a user has many
    */
   function unstake() external {
@@ -251,7 +256,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
   }
 
   /**
-   * @notice Get the winning tokens
+   * @notice Get the winning token IDs
    */
   function winners() external view returns (uint256[] memory) {
     return _winners;
