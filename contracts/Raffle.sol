@@ -54,6 +54,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
 
   struct Stake {
     bool claimed;
+    bool won;
     address stakingToken;
     uint256 day;
   }
@@ -63,7 +64,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
     bool answered;
   }
 
-  mapping(uint256 => bool) public won;
   mapping(uint256 => address) public stakingToken;
   mapping(uint256 => uint256) internal _lastTokenInEpoch;
   mapping(uint256 => Stake) internal _staked;
@@ -187,7 +187,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
     _lastTokenInEpoch[currentDay()] = token;
     _safeMint(msg.sender, token);
     _setTokenURI(token, Strings.toString(token));
-    _staked[token] = Stake(false, _stakingToken, currentDay());
+    _staked[token] = Stake(false, false, _stakingToken, currentDay());
     if (canGetRandomNumber()) {
       getRandomNumber();
     }
@@ -208,7 +208,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
       Stake memory stake = _staked[token];
       if (!stake.claimed && stake.day < currentDay()) {
           _staked[token].claimed = true;
-          if (won[token]) {
+          if (stake.won) {
             payoutToken.safeTransfer(msg.sender, payoutAmount);
           }
           IERC20(stake.stakingToken).safeTransfer(msg.sender, stakeAmount);
@@ -267,7 +267,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
       max = _lastTokenInEpoch[current.sub(1)];
     }
     uint256 token = (_randomNumber % max.sub(min)).add(min);
-    won[token] = true;
+    _staked[token].won = true;
     address winner = ownerOf(token);
     _winners.push(token);
     emit Winner(winner, token);
