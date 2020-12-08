@@ -18,8 +18,8 @@ import "./ILinkswapPair.sol";
  * the contract is funded and getRandomNumber() is called.
  * @dev Deployment/usage process:
  * - Deploy contract with documented parameters set
- * - Approve contract to spend LINK and the payoutToken for the amount multiplied by the winners
- * - Optionally you can simply send LINK and the payoutToken directly to the contract
+ * - Approve contract to spend LINK and YFL for the amount multiplied by the winners
+ * - Optionally you can simply send LINK and YFL directly to the contract
  * - Call init(address[]) with the addresses to be used for staking (the LP tokens)
  * - Users will need to approve the contract to spend the staking token
  * - Users can call stake(address) to stake the stakeAmount of the staking token and receive 1 NFT
@@ -37,12 +37,12 @@ contract Raffle is VRFConsumerBase, ERC721 {
 
   uint256 public immutable stakeAmount;
   uint256 public immutable stakeCap;
-  uint256 public immutable payoutAmount;
+  uint256 public immutable prizeAmount;
   bytes32 public immutable keyHash;
   uint256 public immutable fee;
   address public immutable vrfCoordinator;
   AggregatorInterface public immutable linkUsd;
-  IERC20 public immutable payoutToken;
+  IERC20 public immutable YFL;
   ILinkswapFactory public immutable linkswapFactory;
   uint256 public immutable startTime;
   uint256 public immutable activeDays;
@@ -64,10 +64,17 @@ contract Raffle is VRFConsumerBase, ERC721 {
     bool answered;
   }
 
-  mapping(uint256 => address) public stakingToken;
+  struct Day {
+    address stakingToken;
+    address payoutToken;
+    uint256 payoutAmount;
+    uint256 lastTokenId;
+  }
+
   mapping(uint256 => uint256) internal _lastTokenInEpoch;
   mapping(uint256 => Stake) internal _staked;
   mapping(uint256 => Randomness) internal _randomnessRequest;
+  mapping(uint256 => Day) internal _day;
 
   event Winner(address indexed _selected, uint256 indexed _tokenId);
   event GetRandom(bytes32 _requestId);
@@ -85,8 +92,8 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @param _linkswapFactory The address of the LINKSWAP Factory contract
    * @param _stakeAmount The amount of staking tokens for one ticket
    * @param _stakeCap The maximum number of times an address can stake (0 for no cap)
-   * @param _payoutToken The winning payout token address
-   * @param _payoutAmount The amount to pay each winner
+   * @param _YFL The winning payout token address
+   * @param _prizeAmount The amount to pay each winner
    * @param _startTime The timestamp of when the raffle should start
    * @param _days The number of days the raffle will last
    */
@@ -102,8 +109,8 @@ contract Raffle is VRFConsumerBase, ERC721 {
     address _linkswapFactory,
     uint256 _stakeAmount,
     uint256 _stakeCap,
-    address _payoutToken,
-    uint256 _payoutAmount,
+    address _YFL,
+    uint256 _prizeAmount,
     uint256 _startTime,
     uint256 _days
   )
@@ -120,8 +127,8 @@ contract Raffle is VRFConsumerBase, ERC721 {
     linkswapFactory = ILinkswapFactory(_linkswapFactory);
     stakeAmount = _stakeAmount;
     stakeCap = _stakeCap;
-    payoutToken = IERC20(_payoutToken);
-    payoutAmount = _payoutAmount;
+    YFL = IERC20(_YFL);
+    prizeAmount = _prizeAmount;
     startTime = _startTime;
     activeDays = _days;
     uint256 _drawingTime = _startTime.add(_days.mul(1 days));
@@ -134,18 +141,36 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @dev Cannot be called twice but tokens can be manually sent to the contract
    * in case something goes wrong. However, these tokens will be unrecoverable.
    * @param _stakingTokens The addresses of the staking tokens
+   * @param _payoutTokens The addresses of the payout tokens (0 address for none)
+   * @param _payoutAmounts The amount of payout for the payout tokens
    */
-  function init(address[] memory _stakingTokens) external {
+  function init(
+    address[] memory _stakingTokens,
+    address[] memory _payoutTokens,
+    uint256[] memory _payoutAmounts
+  )
+    external
+  {
     require(!initialized, "initialized");
+    require(_stakingTokens.length == _payoutTokens.length
+        && _payoutTokens.length == _payoutAmounts.length, "!length");
     require(_stakingTokens.length <= activeDays, "!_stakingTokens");
-    if (payoutToken.balanceOf(address(this)) < payoutAmount.mul(activeDays)) {
-      payoutToken.safeTransferFrom(msg.sender, address(this), payoutAmount.mul(activeDays));
+    // ensure contract is funded with YFL
+    if (YFL.balanceOf(address(this)) < prizeAmount.mul(activeDays)) {
+      YFL.safeTransferFrom(msg.sender, address(this), prizeAmount.mul(activeDays));
     }
+    // ensure the contract is funded with LINK
     if (LINK.balanceOf(address(this)) < fee.mul(activeDays)) {
       LINK.transferFrom(msg.sender, address(this), fee.mul(activeDays));
     }
     for (uint i = 0; i < _stakingTokens.length; i++) {
-      stakingToken[i] = _stakingTokens[i];
+      _day[i] = Day(_stakingTokens[i], _payoutTokens[i], _payoutAmounts[i], 0);
+      // ensure the contract is funded with any specific payout tokens
+      // initializer will have to be careful if the same payout token is used twice
+      if (_payoutTokens[i] != address(0) &&
+        IERC20(_payoutTokens[i]).balanceOf(address(this)) < _payoutAmounts[i]) {
+        IERC20(_payoutTokens[i]).transferFrom(msg.sender, address(this), _payoutAmounts[i]);
+      }
     }
     initialized = true;
   }
@@ -162,7 +187,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @notice Returns the address of the current accepted staking token
    */
   function currentStakingToken() public view returns (address) {
-    return stakingToken[currentDay()];
+    return _day[currentDay()].stakingToken;
   }
 
   /**
@@ -196,8 +221,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
 
   /**
    * @notice Recovers the staked LP tokens
-   * @dev Loops through all the tickets, this can get expensive if
-   * a user has many.
+   * @dev Loops through all the tickets, this can get expensive if a user has many
    */
   function unstake() external {
     require(_randomnessRequest[currentDay().sub(1)].answered, "!answered");
@@ -205,13 +229,23 @@ contract Raffle is VRFConsumerBase, ERC721 {
     require(balance > 0, "!staked");
     for (uint i = 0; i < balance; i++) {
       uint256 token = tokenOfOwnerByIndex(msg.sender, i);
-      Stake memory stake = _staked[token];
-      if (!stake.claimed && stake.day < currentDay()) {
-          _staked[token].claimed = true;
-          if (stake.won) {
-            payoutToken.safeTransfer(msg.sender, payoutAmount);
+      Stake memory staked = _staked[token];
+      // if unclaimed and we've passed beyond the drawing's day
+      if (!staked.claimed && staked.day < currentDay()) {
+        _staked[token].claimed = true;
+        // if caller is a winner
+        if (staked.won) {
+          // send them YFL
+          YFL.safeTransfer(msg.sender, prizeAmount);
+          address payoutToken = _day[staked.day].payoutToken;
+          // if there's an additional payout token
+          if (payoutToken != address(0)) {
+            // send them the payout token
+            IERC20(payoutToken).safeTransfer(msg.sender, _day[staked.day].payoutAmount);
           }
-          IERC20(stake.stakingToken).safeTransfer(msg.sender, stakeAmount);
+        }
+        // send them their staking token back
+        IERC20(staked.stakingToken).safeTransfer(msg.sender, stakeAmount);
       }
     }
   }

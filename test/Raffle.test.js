@@ -32,7 +32,7 @@ contract('Raffle', (accounts) => {
   const stakeAmount = ether('1')
   const stakeCap = 3
   const activeDays = 3
-  let raffle, stakingToken1, stakingToken2, stakingToken3, fakeToken, tokenA, tokenB, tokenC, tokenD, link, payoutToken, linkUsdFeed, linkswapFactory, vrfCoordinator
+  let raffle, stakingToken1, stakingToken2, stakingToken3, fakeToken, tokenA, tokenB, tokenC, tokenD, link, yfl, payoutToken, linkUsdFeed, linkswapFactory, vrfCoordinator
 
   before(async () => {
     const block = await web3.eth.getBlock('latest')
@@ -72,7 +72,8 @@ contract('Raffle', (accounts) => {
       tokenA.address,
       tokenC.address,
       { from: maintainer })
-    payoutToken = await Token.new('Payment Token', 'PT', { from: maintainer })
+    payoutToken = await Token.new('Sponsor Payout Token', 'SPT', { from: maintainer })
+    yfl = await Token.new('YFLink', 'YFL', { from: maintainer })
     vrfCoordinator = await MockVRFCoordinator.new(link.address, ether('1'), { from: maintainer })
     linkUsdFeed = await MockV2Aggregator.new(linkUsd, { from: maintainer })
     raffle = await Raffle.new(
@@ -87,7 +88,7 @@ contract('Raffle', (accounts) => {
       linkswapFactory.address,
       stakeAmount,
       stakeCap,
-      payoutToken.address,
+      yfl.address,
       payoutAmount,
       startTime,
       activeDays,
@@ -127,24 +128,116 @@ contract('Raffle', (accounts) => {
     )
 
     await expectRevert(
-      raffle.init([
-        stakingToken1.address,
-        stakingToken1.address,
-        stakingToken1.address,
-        stakingToken2.address
-      ]),
+      raffle.init(
+        [
+          stakingToken1.address,
+          stakingToken1.address,
+          stakingToken1.address,
+          stakingToken1.address,
+        ],
+        [
+          constants.ZERO_ADDRESS,
+          payoutToken.address,
+          constants.ZERO_ADDRESS,
+          constants.ZERO_ADDRESS
+        ],
+        [
+          payoutAmount,
+          payoutAmount,
+          payoutAmount
+        ]
+      ),
+      '!length'
+    )
+
+    await expectRevert(
+      raffle.init(
+        [
+          stakingToken1.address,
+          stakingToken1.address,
+          stakingToken1.address,
+          stakingToken1.address,
+        ],
+        [
+          constants.ZERO_ADDRESS,
+          payoutToken.address,
+          constants.ZERO_ADDRESS
+        ],
+        [
+          payoutAmount,
+          payoutAmount,
+          payoutAmount,
+          payoutAmount
+        ]
+      ),
+      '!length'
+    )
+
+    await expectRevert(
+      raffle.init(
+        [
+          stakingToken1.address,
+          stakingToken1.address,
+          stakingToken1.address
+        ],
+        [
+          constants.ZERO_ADDRESS,
+          payoutToken.address,
+          constants.ZERO_ADDRESS,
+          constants.ZERO_ADDRESS
+        ],
+        [
+          payoutAmount,
+          payoutAmount,
+          payoutAmount,
+          payoutAmount
+        ]
+      ),
+      '!length'
+    )
+
+    await expectRevert(
+      raffle.init(
+        [
+          stakingToken1.address,
+          stakingToken1.address,
+          stakingToken1.address,
+          stakingToken2.address
+        ],
+        [
+          constants.ZERO_ADDRESS,
+          payoutToken.address,
+          constants.ZERO_ADDRESS,
+          constants.ZERO_ADDRESS
+        ],
+        [
+          payoutAmount,
+          payoutAmount,
+          payoutAmount,
+          payoutAmount
+        ]
+      ),
       '!_stakingTokens'
     )
 
     await link.approve(raffle.address, ether('3'), { from: maintainer })
-    await payoutToken.transfer(raffle.address, ether('3'), { from: maintainer })
-    await raffle.init([stakingToken1.address, stakingToken2.address])
+    await yfl.transfer(raffle.address, ether('3'), { from: maintainer })
+    await payoutToken.transfer(raffle.address, ether('1'), { from: maintainer })
+    await raffle.init(
+      [stakingToken1.address, stakingToken2.address],
+      [constants.ZERO_ADDRESS, payoutToken.address],
+      [0, payoutAmount]
+    )
     assert.isTrue(await raffle.initialized())
     assert.isTrue(ether('3').eq(await link.balanceOf(raffle.address)))
-    assert.isTrue(ether('3').eq(await payoutToken.balanceOf(raffle.address)))
+    assert.isTrue(ether('3').eq(await yfl.balanceOf(raffle.address)))
 
     await expectRevert(
-      raffle.init([stakingToken1.address, stakingToken2.address]),
+      raffle.init(
+        [stakingToken1.address, stakingToken2.address],
+        [constants.ZERO_ADDRESS, payoutToken.address],
+        [0, payoutAmount]
+      ),
       'initialized'
     )
   })
@@ -196,7 +289,7 @@ contract('Raffle', (accounts) => {
     await raffle.stake(stakingToken2.address, { from: user7 })
     await raffle.stake(stakingToken2.address, { from: user8 })
     const unstakeTx = await raffle.unstake({ from: user1 })
-    await expectEvent.inTransaction(unstakeTx.tx, payoutToken, 'Transfer', {
+    await expectEvent.inTransaction(unstakeTx.tx, yfl, 'Transfer', {
       from: raffle.address,
       to: user1
     })
@@ -271,12 +364,12 @@ contract('Raffle', (accounts) => {
 
   it('allows unstaking after the last drawing', async () => {
     const tx2 = await raffle.unstake({ from: user7 })
-    await expectEvent.inTransaction(tx2.tx, payoutToken, 'Transfer', {
+    await expectEvent.inTransaction(tx2.tx, yfl, 'Transfer', {
       from: raffle.address,
       to: user7
     })
     const tx3 = await raffle.unstake({ from: user9 })
-    await expectEvent.inTransaction(tx3.tx, payoutToken, 'Transfer', {
+    await expectEvent.inTransaction(tx3.tx, yfl, 'Transfer', {
       from: raffle.address,
       to: user9
     })
