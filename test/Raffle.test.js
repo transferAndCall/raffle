@@ -28,7 +28,6 @@ contract('Raffle', (accounts) => {
   const vrfKeyHash = constants.ZERO_BYTES32
   const vrfFee = ether('1')
   const payoutAmount = ether('1')
-  const stakeAmount = ether('1')
   const entryCap = 3
   const activeDays = 3
   let raffle, lpToken1, lpToken2, lpToken3, rewardsVault1, rewardsVault2, fakeToken, link, yfl, payoutToken, linkUsdFeed, vrfCoordinator
@@ -74,7 +73,6 @@ contract('Raffle', (accounts) => {
       vrfCoordinator.address,
       link.address,
       linkUsdFeed.address,
-      stakeAmount,
       entryCap,
       yfl.address,
       payoutAmount,

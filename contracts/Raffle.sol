@@ -30,7 +30,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
   using SafeERC20 for IERC20;
   using SafeMath for uint256;
 
-  uint256 public immutable stakeAmount;
   uint256 public immutable entryCap;
   uint256 public immutable prizeAmount;
   bytes32 public immutable keyHash;
@@ -82,7 +81,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
    * @param _vrfCoordinator The address of the VRFCoordinator
    * @param _link The address of the LINK token
    * @param _linkUsd The address of the LINK/USD feed
-   * @param _stakeAmount The amount of staking tokens for one ticket
    * @param _entryCap The maximum number of times an address can stake (0 for no cap)
    * @param _YFL The winning payout token address
    * @param _prizeAmount The amount to pay each winner
@@ -98,7 +96,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
     address _vrfCoordinator,
     address _link,
     address _linkUsd,
-    uint256 _stakeAmount,
     uint256 _entryCap,
     address _YFL,
     uint256 _prizeAmount,
@@ -115,7 +112,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
     fee = _fee;
     vrfCoordinator = _vrfCoordinator;
     linkUsd = AggregatorInterface(_linkUsd);
-    stakeAmount = _stakeAmount;
     entryCap = _entryCap;
     YFL = IERC20(_YFL);
     prizeAmount = _prizeAmount;
@@ -198,7 +194,6 @@ contract Raffle is VRFConsumerBase, ERC721 {
 
   /**
    * @notice Issues a NFT representing a lottery ticket to the caller
-   * @notice Cost of a ticket is determined by the stakeAmount
    * @dev This contract must be approved for spending first
    * @dev Cannot be called after the lottery drawing has passed
    */
