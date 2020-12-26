@@ -289,7 +289,7 @@ contract Raffle is VRFConsumerBase, ERC721 {
       max = totalSupply();
     // all other days
     } else {
-      min = _lastTokenInEpoch[current.sub(2)];
+      min = _lastTokenInEpoch[current.sub(2)].add(1);
       max = _lastTokenInEpoch[current.sub(1)];
     }
     uint256 token = (_randomNumber % max.sub(min)).add(min);
